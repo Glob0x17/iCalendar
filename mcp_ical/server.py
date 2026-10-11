@@ -41,7 +41,7 @@ def is_read_only(environ=None) -> bool:
 
 
 # Initialize the CalendarManager on demand in order to only establish CalDAV connection
-# when a calendar tool is invoked instead of on the launch of the Claude Desktop app.
+# when a calendar tool is invoked instead of when the MCP client starts.
 @cache
 def get_calendar_manager() -> CalendarManager:
     """Get or initialize the calendar manager with proper error handling."""

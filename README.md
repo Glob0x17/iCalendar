@@ -1,330 +1,236 @@
 # iCloud Calendar MCP Server
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A powerful Model Context Protocol (MCP) server that provides natural language calendar management for iCloud Calendar through the CalDAV protocol. This cross-platform solution enables you to interact with your iCloud Calendar using natural language commands in any MCP-compatible client.
+A [Model Context Protocol](https://modelcontextprotocol.io/) server that gives MCP clients access to iCloud Calendar
+over CalDAV: list calendars, read, create, update, move and delete events. It works on Linux, macOS and Windows,
+since it talks to iCloud directly instead of going through the macOS Calendar app.
 
-## ✨ Features
+This is a maintained fork of [zwrong/iCalendar](https://github.com/zwrong/iCalendar), itself derived from the macOS
+`mcp-ical` server. See [Changes in this fork](#changes-in-this-fork).
 
-- **🔍 List Calendars**: View all available iCloud calendars
-- **📅 Event Management**: Create, read, update, and delete calendar events
-- **🔄 Recurring Events**: Support for recurring event patterns
-- **⏰ Smart Alarms**: Set custom reminders for events
-- **🌐 Cross-Platform**: Works on macOS, Windows, and Linux
-- **🔐 Secure**: Uses app-specific passwords for secure iCloud authentication
-- **🤖 Natural Language**: Integrate with AI assistants for natural calendar interactions
-- **🔌 MCP Compliant**: Full support for the Model Context Protocol
+## Tools
 
-## 📋 Prerequisites
+| Tool | Description |
+|---|---|
+| `list_calendars` | Names of the available calendars |
+| `list_events` | Events in a date range, optionally for one calendar, sorted by start time |
+| `create_event` | New event: title, times, all-day, location, notes, URL, alarms, recurrence |
+| `update_event` | Change any of those fields, or move the event to another calendar |
+| `delete_event` | Delete an event by identifier |
+| `debug_calendar_connection` | Connection check: calendars and event counts over the last 7 days |
 
-- Python 3.12 or higher
-- An iCloud account
-- An app-specific password for your Apple ID
+The `calendars://list` resource also lists the calendars. With `MCP_ICAL_READ_ONLY=true`, the three write tools are
+not registered at all.
 
-## 🚀 Installation
+## Requirements
 
-### Option 1: Install from Source
+- Python 3.12 or later and [uv](https://docs.astral.sh/uv/)
+- An Apple ID with iCloud Calendar enabled
+- An **app-specific password** for that Apple ID
 
-1. **Clone this repository**:
-   ```bash
-   git clone https://github.com/Glob0x17/iCalendar.git
-   cd mcp-ical
-   ```
+### App-specific password
 
-2. **Install dependencies**:
-   ```bash
-   uv sync
-   ```
+1. Sign in to [appleid.apple.com](https://appleid.apple.com/), open **Sign-In and Security**, then
+   **App-Specific Passwords**.
+2. Generate a password, for example named `mcp-ical`.
 
+The username is your Apple ID address, which is not necessarily an `@icloud.com` address.
+An app-specific password gives access to iCloud CalDAV, CardDAV and IMAP: keep it out of version control and revoke
+it if it leaks.
 
-## ⚙️ Configuration
+## Installation
 
-### Step 1: Generate an App-Specific Password
+```bash
+git clone https://github.com/Glob0x17/iCalendar.git mcp-ical
+cd mcp-ical
+uv sync --no-dev
+```
 
-1. Sign in to [appleid.apple.com](https://appleid.apple.com/)
-2. Navigate to "Sign-In & Security"
-3. Select "App-Specific Passwords"
-4. Generate a new password (e.g. named `mcp-ical`)
+## Configuration
 
-⚠️ An app-specific password grants access to all of iCloud over CalDAV, CardDAV and IMAP. Never commit it, and revoke it if in doubt. The username is your Apple ID address, which is not necessarily an `@icloud.com` address.
-
-### Step 2: Provide the Credentials
-
-Credentials are looked up in this order:
+Credentials are read in this order:
 
 1. **Environment variables** (recommended)
 
    | Variable | Required | Default |
    |---|---|---|
-   | `ICLOUD_USERNAME` | yes | — |
-   | `ICLOUD_PASSWORD` | yes | — |
+   | `ICLOUD_USERNAME` | yes | |
+   | `ICLOUD_PASSWORD` | yes | |
    | `CALDAV_SERVER_URL` | no | `https://caldav.icloud.com/` |
 
-2. **`MCP_ICAL_CONFIG`**: path to a JSON file with the format of `config.json.example`
-3. **`config_private.json`**, then **`config.json`** at the repository root (legacy)
+2. **`MCP_ICAL_CONFIG`**: path to a JSON file shaped like [`config.json.example`](config.json.example)
+3. **`config_private.json`**, then **`config.json`**, at the repository root (kept for compatibility)
 
-**Important**: never commit `config_private.json`: it contains your credentials.
-
-### Other Settings
+Other settings:
 
 | Variable | Default | Effect |
 |---|---|---|
-| `MCP_ICAL_LOG_LEVEL` | `INFO` | `TRACE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`. Event contents are only logged at `DEBUG` or below. Logs go to stderr. |
-| `MCP_ICAL_READ_ONLY` | `false` | When `true`, `create_event`, `update_event` and `delete_event` are not registered at all. |
+| `MCP_ICAL_READ_ONLY` | `false` | `true` leaves out `create_event`, `update_event` and `delete_event` |
+| `MCP_ICAL_LOG_LEVEL` | `INFO` | `TRACE`, `DEBUG`, `INFO`, `WARNING` or `ERROR`. Logs go to stderr |
 
-## 🏃 Running the Server
+The server speaks MCP over stdio and is started by the client. To check it by hand:
 
-The server speaks MCP over stdio and is started by your MCP client. To check it manually:
 ```bash
-ICLOUD_USERNAME=... ICLOUD_PASSWORD=... uv run mcp-ical
+ICLOUD_USERNAME=you@example.com ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx uv run mcp-ical
 ```
-It waits on stdin with no output on stdout.
 
-## Claude Code Configuration
+It waits on stdin and prints nothing on stdout.
 
-`claude mcp add -e` stores values in clear text in `~/.claude.json`. To keep secrets out of it, use a wrapper that sources an env file:
+## Client setup
+
+Use the absolute path of `uv` (`which uv`): clients often start servers without your shell `PATH`, which shows up
+as `spawn uv ENOENT`.
+
+### Keeping the password out of the client config
+
+Most clients store `env` values in clear text in their config file. A small wrapper that reads an env file avoids
+that:
 
 ```bash
 mkdir -p ~/.config/mcp-ical && chmod 700 ~/.config/mcp-ical
-cat > ~/.config/mcp-ical/env <<'ENV'
-ICLOUD_USERNAME=your-apple-id@example.com
+cat > ~/.config/mcp-ical/env <<'EOF'
+ICLOUD_USERNAME=you@example.com
 ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx
-MCP_ICAL_LOG_LEVEL=INFO
 MCP_ICAL_READ_ONLY=true
-ENV
+EOF
 chmod 600 ~/.config/mcp-ical/env
 
-cat > ~/.local/bin/mcp-ical-run <<'WRAPPER'
+cat > ~/.local/bin/mcp-ical-run <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 set -a; source "$HOME/.config/mcp-ical/env"; set +a
-exec /ABSOLUTE/PATH/TO/uv --directory "$HOME/src/mcp-ical" run mcp-ical
-WRAPPER
+exec /absolute/path/to/uv --directory /absolute/path/to/mcp-ical run --frozen --no-dev mcp-ical
+EOF
 chmod +x ~/.local/bin/mcp-ical-run
+```
 
+Then point the client at `~/.local/bin/mcp-ical-run`. Starting read-only and switching to `false` once reading works
+is a sensible first step.
+
+### Claude Desktop
+
+In `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "icloud-calendar": {
+      "command": "/absolute/path/to/uv",
+      "args": ["--directory", "/absolute/path/to/mcp-ical", "run", "--frozen", "--no-dev", "mcp-ical"],
+      "env": {
+        "ICLOUD_USERNAME": "you@example.com",
+        "ICLOUD_PASSWORD": "xxxx-xxxx-xxxx-xxxx"
+      }
+    }
+  }
+}
+```
+
+or, with the wrapper, `"command": "/home/you/.local/bin/mcp-ical-run"` and no `env`.
+
+### Claude Code
+
+```bash
 claude mcp add --scope user icloud-calendar -- ~/.local/bin/mcp-ical-run
 ```
 
-Use the absolute path of `uv` (`which uv`) to avoid `spawn uv ENOENT`. In a Claude Code session, `/mcp` shows the server status and its tools.
+`/mcp` in a session shows the server state and its tools.
 
-## Claude Desktop Configuration
+### Other clients
 
-Add to your `claude_desktop_config.json`:
+Any MCP client that can start a stdio server works: run `uv --directory /path/to/mcp-ical run mcp-ical` with the
+environment variables above.
 
-```json
-{
-  "mcpServers": {
-    "iCalendar": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/ABSOLUTE/PATH/TO/PARENT/FOLDER/iCalendar",
-        "run",
-        "mcp-ical"
-      ]
-    }
-  }
-}
-```
+## Behavior worth knowing
 
-### Troubleshooting
+- **Times.** Event times are written in UTC. A time with an offset (`2030-01-07T09:30:00+01:00`) is converted, and a
+  time without one is taken as the machine's local time. Times are shown back in the machine's timezone. All-day
+  events are written as dates, with the end date exclusive as the iCalendar standard requires.
+- **Moving between calendars.** iCloud refuses the same event UID in two calendars, so a move cannot be
+  "copy then delete". `update_event` with `calendar_name` uses a WebDAV `MOVE`, which is atomic on the server: if it
+  fails, the event stays where it was. A move without other changes keeps the original iCalendar data untouched.
+- **Finding events.** Listings fill an in-memory index (UID to URL) that lives as long as the server process.
+  Lookups then go straight to the event, falling back to the `<calendar>/<UID>.ics` URL iCloud uses for most
+  events, and only then to a scan of all calendars. iCloud does not support CalDAV UID searches.
+- **Volume.** iCloud returns any number of events per request. The practical limit is the client: many cap a tool
+  result at around 25,000 tokens, roughly 300 events in this server's output, so split long ranges.
+- **Scope.** Only calendars hosted on iCloud are visible. Exchange, Google or other accounts added to the Calendar
+  app on a device are not reachable through iCloud CalDAV, and neither are read-only subscribed (ICS) calendars.
 
-**If you encounter "spawn uv ENOENT" error:**
+## Privacy and security
 
-![spawn uv ENOENT](https://github.com/zwrong/iCalendar/blob/main/README.assets/spawn%20uv%20ENOENT.png?raw=true)
+- The only network destination is the configured CalDAV server; there is no telemetry.
+- The password never appears in logs, at any level, nor in the configuration object's `repr`.
+- Logs go to stderr only, since stdout carries the MCP protocol. Event contents (titles, notes) are logged only at
+  `DEBUG` or below; at `INFO`, only identifiers. Some clients save server stderr to disk, so keep `DEBUG` for
+  troubleshooting.
+- Dependencies are locked in `uv.lock` and resolved from the official PyPI index only.
 
-This error occurs when the system cannot find the `uv` command in the PATH. To fix this, specify the full path to your `uv` executable:
+## Troubleshooting
 
-```json
-{
-  "mcpServers": {
-    "ical": {
-      "command": "/ABSOLUTE/PATH/TO/uv",
-      "args": [
-        "--directory",
-        "/ABSOLUTE/PATH/TO/PARENT/FOLDER/iCalendar",
-        "run",
-        "mcp-ical"
-      ]
-    }
-  }
-}
-```
+| Symptom | Likely cause |
+|---|---|
+| `401 Unauthorized` | Regular Apple ID password instead of an app-specific one, or a revoked one |
+| `spawn uv ENOENT` | `uv` is not on the client's `PATH`: use its absolute path |
+| No events returned | Wrong date range, an event in a non-iCloud or subscribed calendar, or a timezone mix-up |
+| Server does not respond | Something writes to stdout and breaks the stdio protocol |
+| `Calendar 'X' not found` | Calendar names are case-sensitive: check `list_calendars` |
 
-Find the path to your `uv` executable by running:
-```bash
-which uv
-# or on Windows:
-where uv
-```
+`debug_calendar_connection` and `MCP_ICAL_LOG_LEVEL=DEBUG` help narrow things down.
 
-Replace `/ABSOLUTE/PATH/TO/uv` with the actual path returned by the command.
-
-After Configuration of Claude Desktop, restart the  Claude Desktop and use it!
-
-## 📚 Usage Examples
-
-### Example 1: Check your plans
-
-```
-User: "Do I have any plans today?"
-
-AI: I'll check your calendar for today
-→ list_events("2025-11-06T00:00:00", "2025-11-06T23:59:59")
-```
-
-![iShot_2025-11-06_13.29.26](./README.assets/iShot_2025-11-06_13.29.26.png)
-
-### Example 2: Creating an Event
-
-```
-User: "Schedule a lunch meeting with John on Friday at noon"
-
-AI: I'll create that event for you
-→ create_event({
-    "title": "Lunch Meeting with John",
-    "start_datetime": "2025-01-17T12:00:00",
-    "end_datetime": "2025-01-17T13:00:00",
-    "calendar_name": "Personal",
-    "description": "Discuss project updates"
-  })
-```
-
-![iShot_2025-11-05_21.35.33](./README.assets/iShot_2025-11-05_21.35.33.png)
-
-### Example 3: Delete an Event
-
-```
-User: "Delete the lunch meeting this week"
-
-AI: I'll create that event for you
-→ create_event({
-    "title": "Lunch Meeting with John",
-    "start_datetime": "2025-01-17T12:00:00",
-    "end_datetime": "2025-01-17T13:00:00",
-    "calendar_name": "Personal",
-    "description": "Discuss project updates"
-  })
-```
-
-![iShot_2025-11-05_21.31.03](./README.assets/iShot_2025-11-05_21.31.03.png)
-
-![iShot_2025-11-05_21.32.52](./README.assets/iShot_2025-11-05_21.32.52.png)
-
-### Example 4: Setting a Reminder
-
-```
-User: "Remind me about the presentation tomorrow at 9 AM, set the reminder for 30 minutes before"
-
-AI: I'll create the event with a 30-minute reminder
-→ create_event({
-    "title": "Presentation",
-    "start_datetime": "2025-01-06T09:00:00",
-    "end_datetime": "2025-01-06T10:00:00",
-    "alarm": 30
-  })
-```
-
-![iShot_2025-11-05_21.29.05](./README.assets/iShot_2025-11-05_21.29.05.png)
-
-## 🏗️ Architecture
-
-### Core Components
-
-- **`server.py`**: MCP server entry point with tool definitions using MCPServer (mcp 2.x)
-- **`caldav_client.py`**: CalDAVManager class for iCloud CalDAV access and CRUD operations
-- **`ical.py`**: CalendarManager wrapper providing compatibility layer
-- **`models.py`**: Pydantic models for request/response validation
-- **`config.py`**: Configuration management with priority handling
-
-### Dependencies
-
-- **mcp[cli]**: Model Context Protocol framework
-- **caldav** (3.x): CalDAV client library for iCloud access
-- **vobject**: iCalendar file format parsing
-- **loguru**: Structured logging
-- **pydantic**: Data validation and serialization
-
-## 🤝 Integration with AI Clients
-
-This MCP server works with any MCP-compatible client, including:
-- Claude Desktop
-- Claude Code
-- Custom MCP clients
-
-## 🐛 Troubleshooting
-
-### Authentication Issues
-
-- Verify your Apple ID email is correct
-- Ensure you're using an app-specific password (not your regular password)
-- Check that the app-specific password hasn't expired
-- Confirm 2FA is enabled on your Apple ID if required
-
-### Connection Issues
-
-- Verify your internet connection
-- Check that iCloud Calendar is enabled in your Apple ID settings
-- Ensure your firewall allows outbound HTTPS connections
-
-### Event Creation/Update Fails
-
-- Verify event times are in ISO format (YYYY-MM-DDTHH:MM:SS)
-- Ensure start time is before end time
-- Check that the calendar name exists
-
-## 📝 Development
-
-### Project Structure
-
-```
-mcp-ical/
-├── mcp_ical/
-│   ├── server.py          # MCP server entry point
-│   ├── caldav_client.py   # CalDAV operations
-│   ├── ical.py            # Calendar manager wrapper
-│   ├── models.py          # Data models
-│   └── config.py          # Configuration
-├── tests/                 # Unit tests (no network)
-│   └── integration/       # Need real credentials, marked `integration`
-├── config.json.example       # Configuration template
-├── pyproject.toml           # Project metadata
-└── README.md                # This file
-```
-
-### Running the Tests
+## Development
 
 ```bash
-uv run pytest -m "not integration"   # unit tests, DAVClient mocked
+uv sync
+uv run pytest -m "not integration"   # unit tests, CalDAV client mocked, no network
 uv run ruff check .
-ICLOUD_USERNAME=... ICLOUD_PASSWORD=... uv run pytest -m integration   # read-only, against iCloud
 ```
 
-## 📖 Known Issues and Solutions
+Integration tests run against a real account, read-only, and are skipped unless credentials are set:
 
-### Recent Fixes (v0.1.0)
+```bash
+ICLOUD_USERNAME=... ICLOUD_PASSWORD=... uv run pytest -m integration
+```
 
-- **Fixed**: `update_event` and `delete_event` now properly handle URL-encoded event IDs
-- **Fixed**: Event identification now checks both `event.id` and `event.url` attributes
-- **Fixed**: Robust type checking for event data (string vs vobject)
+Project layout:
 
-## 📄 License
+```
+mcp_ical/
+├── server.py          # MCP server, tool registration, logging setup
+├── caldav_client.py   # CalDAV access: search, create, update, move, delete, event index
+├── ical.py            # Thin calendar manager used by the server
+├── models.py          # Event and request models, iCalendar parsing
+└── config.py          # Configuration loading
+tests/                 # Unit tests
+tests/integration/     # Read-only tests against a real account
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Changes in this fork
 
-## 🙏 Acknowledgments
+Compared with zwrong/iCalendar 0.1.0:
 
-- [CalDAV](https://tools.ietf.org/html/rfc4791) protocol specification
-- [iCloud Calendar](https://www.icloud.com/calendar/) service
-- [Model Context Protocol](https://modelcontextprotocol.io/) specification
+- **Dependencies.** Lockfile regenerated from the official PyPI index (it resolved packages through a third-party
+  mirror over plain HTTP). Upgrade to `mcp` 2.x (`FastMCP` became `MCPServer`) and `caldav` 3.x; the original code no
+  longer starts against current releases.
+- **Configuration.** Environment variables, `MCP_ICAL_CONFIG`, read-only mode, configurable log level, no event
+  contents in logs above `DEBUG`.
+- **Fixes.**
+  - Creating an event with a timezone offset failed (`Unable to guess TZID`); all-day events and recurrence end
+    dates were written incorrectly.
+  - Alarms were never read back.
+  - Updating an event without a location, notes or URL failed; changing its time produced invalid iCalendar data.
+  - Moving an event deleted it before saving the copy, so a failed save lost it.
+  - New events got a UID containing spaces and the machine's hostname.
+- **Behavior.** Events sorted by start time, compact output without empty fields, in-memory event index.
+- **Tests.** Unit tests for configuration, read-only mode, logging, iCalendar output, moves and lookups.
 
-## 📞 Support
+## Credits and license
 
-- 📧 Email: zwrong@me.com
-- 🐛 Issues: [GitHub Issues](https://github.com/your-username/mcp-ical/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/your-username/mcp-ical/discussions)
+MIT, see [LICENSE](LICENSE).
 
----
-
-**Made with ❤️ for the MCP community**
+- The original macOS `mcp-ical` server (Omar D.), whose copyright notice is kept in `LICENSE`
+- [zwrong/iCalendar](https://github.com/zwrong/iCalendar), the iCloud CalDAV port this fork builds on
+- [python-caldav](https://github.com/python-caldav/caldav) and the
+  [Model Context Protocol](https://modelcontextprotocol.io/) Python SDK
