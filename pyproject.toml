@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A Model Context Protocol server providing tools for CRUD operations on iCloud calendars via CalDAV"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["loguru>=0.7.3", "mcp[cli]>=2.3", "caldav>=3.4", "vobject>=0.9.6"]
+dependencies = ["loguru>=0.7.3", "mcp[cli]>=2.3", "caldav>=3.4", "vobject>=0.9.6", "python-dateutil>=2.9"]
 
 [dependency-groups]
 dev = ["pytest>=8.3.4", "pytest-mock>=3.14.0", "pytest-random-order>=1.1.1", "ruff>=0.6"]
