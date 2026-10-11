@@ -5,7 +5,7 @@ import logging
 import pytest
 from loguru import logger
 
-from mcp_ical import server
+from mcp_icloud_caldav import server
 
 WRITE_TOOL_NAMES = {fn.__name__ for fn in server.WRITE_TOOLS}
 READ_TOOL_NAMES = {fn.__name__ for fn in server.READ_TOOLS}
@@ -44,7 +44,7 @@ def test_read_only_tool_works_with_mocked_davclient(mocker, monkeypatch):
     monkeypatch.setenv("ICLOUD_PASSWORD", "p")
     cal = mocker.Mock()
     cal.get_display_name.return_value = "Personal"
-    client = mocker.patch("mcp_ical.caldav_client.DAVClient")
+    client = mocker.patch("mcp_icloud_caldav.caldav_client.DAVClient")
     client.return_value.principal.return_value.calendars.return_value = [cal]
     server.get_calendar_manager.cache_clear()
 

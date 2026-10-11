@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, timedelta, timezone
 
-from mcp_ical.models import Event
+from mcp_icloud_caldav.models import Event
 
 PARIS = timezone(timedelta(hours=2))
 

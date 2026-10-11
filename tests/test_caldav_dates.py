@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import pytest
 import vobject
 
-from mcp_ical.caldav_client import CalDAVManager, event_dates
-from mcp_ical.models import CreateEventRequest, RecurrenceRule, UpdateEventRequest
+from mcp_icloud_caldav.caldav_client import CalDAVManager, event_dates
+from mcp_icloud_caldav.models import CreateEventRequest, RecurrenceRule, UpdateEventRequest
 
 PARIS = timezone(timedelta(hours=2))
 
@@ -27,10 +27,10 @@ def test_all_day_uses_dates_with_exclusive_end():
 @pytest.fixture
 def manager(mocker):
     """CalDAVManager with no network: the target calendar records what add_event receives."""
-    mocker.patch("mcp_ical.caldav_client.get_config")
-    mocker.patch("mcp_ical.caldav_client.DAVClient")
+    mocker.patch("mcp_icloud_caldav.caldav_client.get_config")
+    mocker.patch("mcp_icloud_caldav.caldav_client.DAVClient")
     # add_event returns the saved object; here it just carries the vcal that would have been sent
-    mocker.patch("mcp_ical.caldav_client.Event.from_caldav_event", side_effect=lambda e: e.vcal)
+    mocker.patch("mcp_icloud_caldav.caldav_client.Event.from_caldav_event", side_effect=lambda e: e.vcal)
     m = CalDAVManager()
     cal = mocker.Mock()
     cal.get_display_name.return_value = "Personal"

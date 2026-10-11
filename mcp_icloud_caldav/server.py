@@ -351,7 +351,7 @@ def create_server(read_only: bool = False) -> MCPServer:
 def main():
     configure_logging()
     server = create_server(read_only=is_read_only())
-    logger.info("Running mcp-ical server...")
+    logger.info("Running mcp-icloud-caldav server...")
     server.run(transport="stdio")
 
 
