@@ -94,6 +94,7 @@ class CalDAVManager:
                 # Continue with other calendars instead of failing completely
                 continue
 
+        events.sort(key=Event.sort_key)
         logger.debug(f"Returning total of {len(events)} successfully parsed events")
         return events
 

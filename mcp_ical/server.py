@@ -109,7 +109,7 @@ async def list_events(start_date: datetime, end_date: datetime, calendar_name: s
                    f"Tip: Check if events exist in this date range and that you have permissions to access the calendar."
 
         logger.info(f"Successfully found {len(events)} events")
-        return "".join([str(event) for event in events])
+        return "\n".join(str(event) for event in events)
 
     except ValueError as e:
         # Handle known configuration issues
