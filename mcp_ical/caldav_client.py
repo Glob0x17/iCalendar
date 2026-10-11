@@ -1,10 +1,8 @@
-import sys
 from datetime import datetime, timedelta
-from typing import Any, List, Optional
-from urllib.parse import urljoin, unquote
+from urllib.parse import unquote
 
 import vobject
-from caldav import DAVClient, Calendar, CalendarObjectResource
+from caldav import Calendar, CalendarObjectResource, DAVClient
 from loguru import logger
 
 from .config import get_config
@@ -30,7 +28,9 @@ class CalDAVManager:
             self.client = DAVClient(
                 url=self.config.caldav.server_url,
                 username=self.config.caldav.username,
-                password=self.config.caldav.password
+                password=self.config.caldav.password,
+                # The URL is explicit: no DNS-based service discovery
+                enable_rfc6764=False,
             )
             self.principal = self.client.principal()
             logger.info("Successfully connected to CalDAV server")
@@ -44,8 +44,8 @@ class CalDAVManager:
         self,
         start_time: datetime,
         end_time: datetime,
-        calendar_name: Optional[str] = None,
-    ) -> List[Event]:
+        calendar_name: str | None = None,
+    ) -> list[Event]:
         """List all events within a given date range."""
         logger.debug(f"list_events called with start_time={start_time}, end_time={end_time}, calendar_name={calendar_name}")
 
@@ -59,7 +59,7 @@ class CalDAVManager:
         events = []
         for i, cal in enumerate(calendars):
             try:
-                logger.debug(f"Searching calendar {i+1}/{len(calendars)}: {cal.name}")
+                logger.debug(f"Searching calendar {i+1}/{len(calendars)}: {cal.get_display_name()}")
                 logger.debug(f"Calendar URL: {cal.url}")
 
                 # Use CalDAV time-range search
@@ -71,11 +71,11 @@ class CalDAVManager:
                     expand=True
                 )
 
-                logger.debug(f"CalDAV search returned {len(results)} raw events from calendar '{cal.name}'")
+                logger.debug(f"CalDAV search returned {len(results)} raw events from calendar '{cal.get_display_name()}'")
 
                 for j, event in enumerate(results):
                     try:
-                        logger.debug(f"Processing event {j+1}/{len(results)} from calendar '{cal.name}'")
+                        logger.debug(f"Processing event {j+1}/{len(results)} from calendar '{cal.get_display_name()}'")
                         logger.debug(f"Raw event ID: {event.id}, URL: {event.url}")
 
                         parsed_event = Event.from_caldav_event(event)
@@ -83,14 +83,14 @@ class CalDAVManager:
                         events.append(parsed_event)
 
                     except Exception as parse_error:
-                        logger.error(f"Failed to parse event {event.id} from calendar '{cal.name}': {parse_error}")
+                        logger.error(f"Failed to parse event {event.id} from calendar '{cal.get_display_name()}': {parse_error}")
                         logger.debug(f"Event data that failed to parse: {event.data}")
                         # Continue processing other events instead of failing completely
                         continue
 
             except Exception as e:
-                logger.error(f"Failed to search events in calendar {cal.name}: {e}")
-                logger.debug(f"Calendar details that failed: name='{cal.name}', url='{cal.url}'")
+                logger.error(f"Failed to search events in calendar {cal.get_display_name()}: {e}")
+                logger.debug(f"Calendar details that failed: name='{cal.get_display_name()}', url='{cal.url}'")
                 # Continue with other calendars instead of failing completely
                 continue
 
@@ -148,8 +148,8 @@ class CalDAVManager:
 
         try:
             # Save event to calendar
-            event = calendar.save_event(vcal)
-            logger.info(f"Successfully created event: {new_event.title}")
+            event = calendar.add_event(vcal)
+            logger.info(f"Successfully created event: {event.id}")
             return Event.from_caldav_event(event)
 
         except Exception as e:
@@ -228,7 +228,7 @@ class CalDAVManager:
                 vevent.add('rrule').value = rrule_str
 
         # Handle calendar change
-        if request.calendar_name and request.calendar_name != calendar.name:
+        if request.calendar_name and request.calendar_name != calendar.get_display_name():
             new_calendar = self._find_calendar_by_name(request.calendar_name)
             if not new_calendar:
                 raise ValueError(f"Calendar '{request.calendar_name}' not found")
@@ -239,8 +239,8 @@ class CalDAVManager:
 
         try:
             # Save updated event
-            event = calendar.save_event(vcal)
-            logger.info(f"Successfully updated event: {request.title or vevent.summary.value}")
+            event = calendar.add_event(vcal)
+            logger.info(f"Successfully updated event: {event.id}")
             return Event.from_caldav_event(event)
 
         except Exception as e:
@@ -262,7 +262,7 @@ class CalDAVManager:
             logger.error(f"Failed to delete event: {e}")
             raise
 
-    def find_event_by_id(self, event_id: str) -> Optional[CalendarObjectResource]:
+    def find_event_by_id(self, event_id: str) -> CalendarObjectResource | None:
         """Find an event by its identifier."""
         logger.debug(f"Searching for event with ID: {event_id}")
 
@@ -274,21 +274,21 @@ class CalDAVManager:
 
         for calendar in calendars:
             try:
-                logger.debug(f"Searching calendar '{calendar.name}' for event ID '{event_id}'")
+                logger.debug(f"Searching calendar '{calendar.get_display_name()}' for event ID '{event_id}'")
                 events = calendar.events()
-                logger.debug(f"Calendar '{calendar.name}' has {len(events)} total events")
+                logger.debug(f"Calendar '{calendar.get_display_name()}' has {len(events)} total events")
 
                 for event in events:
                     # Try multiple approaches to match the event
                     # 1. Try event.id (if available and not None)
                     if event.id is not None:
                         if event.id == event_id or event.id == decoded_event_id:
-                            logger.debug(f"Found event via event.id match")
+                            logger.debug("Found event via event.id match")
                             return event
                         # Also try comparing unquote of stored event ID
                         try:
                             if unquote(event.id) == decoded_event_id:
-                                logger.debug(f"Found event via unquote(event.id) match")
+                                logger.debug("Found event via unquote(event.id) match")
                                 return event
                         except Exception:
                             # If unquote fails, skip this comparison
@@ -299,52 +299,50 @@ class CalDAVManager:
                         event_url = str(event.url)
                         # Compare both encoded and decoded versions
                         if event_url == event_id or event_url == decoded_event_id:
-                            logger.debug(f"Found event via event.url match")
+                            logger.debug("Found event via event.url match")
                             return event
                         # Try unquoting the URL
                         try:
                             if unquote(event_url) == decoded_event_id:
-                                logger.debug(f"Found event via unquote(event.url) match")
+                                logger.debug("Found event via unquote(event.url) match")
                                 return event
                         except Exception:
                             pass
 
             except Exception as e:
-                logger.error(f"Failed to search calendar {calendar.name} for event {event_id}: {e}")
-                logger.debug(f"Calendar details that failed: name='{calendar.name}', url='{calendar.url}'")
+                logger.error(f"Failed to search calendar {calendar.get_display_name()} for event {event_id}: {e}")
+                logger.debug(f"Calendar details that failed: name='{calendar.get_display_name()}', url='{calendar.url}'")
                 continue
 
         logger.debug(f"Event with ID '{event_id}' not found in any calendar")
         return None
 
-    def list_calendar_names(self) -> List[str]:
+    def list_calendar_names(self) -> list[str]:
         """List all available calendar names."""
         calendars = self._get_all_calendars()
-        return [cal.name for cal in calendars]
+        return [cal.get_display_name() for cal in calendars]
 
-    def _get_all_calendars(self) -> List[Calendar]:
+    def _get_all_calendars(self) -> list[Calendar]:
         """Get all calendars from the CalDAV server."""
         try:
             calendars = self.principal.calendars()
             logger.debug(f"Successfully retrieved {len(calendars)} calendars")
             for cal in calendars:
-                logger.debug(f"Calendar: name='{cal.name}', url='{cal.url}'")
+                logger.debug(f"Calendar: name='{cal.get_display_name()}', url='{cal.url}'")
             return calendars
         except Exception as e:
             logger.error(f"Failed to get calendars: {e}")
-            logger.debug(f"Principal object: {self.principal}")
-            logger.debug(f"Client object: {self.client}")
             return []
 
-    def _find_calendar_by_name(self, calendar_name: str) -> Optional[Calendar]:
+    def _find_calendar_by_name(self, calendar_name: str) -> Calendar | None:
         """Find a calendar by name."""
         calendars = self._get_all_calendars()
         for calendar in calendars:
-            if calendar.name == calendar_name:
+            if calendar.get_display_name() == calendar_name:
                 return calendar
         return None
 
-    def _find_event_calendar(self, event_id: str) -> Optional[Calendar]:
+    def _find_event_calendar(self, event_id: str) -> Calendar | None:
         """Find which calendar contains the specified event."""
         # URL-decode the event_id to handle cases where it contains encoded characters
         decoded_event_id = unquote(event_id)
@@ -379,7 +377,7 @@ class CalDAVManager:
                         except Exception:
                             pass
             except Exception as e:
-                logger.warning(f"Failed to search calendar {calendar.name}: {e}")
+                logger.warning(f"Failed to search calendar {calendar.get_display_name()}: {e}")
         return None
 
     def _recurrence_rule_to_ical(self, recurrence_rule) -> str:

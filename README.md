@@ -28,8 +28,8 @@ A powerful Model Context Protocol (MCP) server that provides natural language ca
 
 1. **Clone this repository**:
    ```bash
-   git clone https://github.com/zwrong/iCalendar.git
-   cd iCalendar
+   git clone https://github.com/Glob0x17/iCalendar.git
+   cd mcp-ical
    ```
 
 2. **Install dependencies**:
@@ -40,46 +40,73 @@ A powerful Model Context Protocol (MCP) server that provides natural language ca
 
 ## ⚙️ Configuration
 
-### Step 1: Create Configuration File
-
-Copy the example configuration file:
-```bash
-cp config.json.example config_private.json
-```
-
-### Step 2: Generate App-Specific Password
+### Step 1: Generate an App-Specific Password
 
 1. Sign in to [appleid.apple.com](https://appleid.apple.com/)
 2. Navigate to "Sign-In & Security"
 3. Select "App-Specific Passwords"
-4. Generate a new password
-5. Copy it to your clipboard
+4. Generate a new password (e.g. named `mcp-ical`)
 
-### Step 3: Configure Credentials
+⚠️ An app-specific password grants access to all of iCloud over CalDAV, CardDAV and IMAP. Never commit it, and revoke it if in doubt. The username is your Apple ID address, which is not necessarily an `@icloud.com` address.
 
-Edit `config_private.json`:
-```json
-{
-  "caldav": {
-    "server_url": "https://caldav.icloud.com/",
-    "username": "your_apple_id@icloud.com",
-    "password": "your_app_specific_password"
-  }
-}
-```
+### Step 2: Provide the Credentials
 
-**Important**: Never commit `config_private.json` to version control! It contains sensitive credentials.
+Credentials are looked up in this order:
+
+1. **Environment variables** (recommended)
+
+   | Variable | Required | Default |
+   |---|---|---|
+   | `ICLOUD_USERNAME` | yes | — |
+   | `ICLOUD_PASSWORD` | yes | — |
+   | `CALDAV_SERVER_URL` | no | `https://caldav.icloud.com/` |
+
+2. **`MCP_ICAL_CONFIG`**: path to a JSON file with the format of `config.json.example`
+3. **`config_private.json`**, then **`config.json`** at the repository root (legacy)
+
+**Important**: never commit `config_private.json`: it contains your credentials.
+
+### Other Settings
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MCP_ICAL_LOG_LEVEL` | `INFO` | `TRACE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`. Event contents are only logged at `DEBUG` or below. Logs go to stderr. |
+| `MCP_ICAL_READ_ONLY` | `false` | When `true`, `create_event`, `update_event` and `delete_event` are not registered at all. |
 
 ## 🏃 Running the Server
 
-Start the server:
+The server speaks MCP over stdio and is started by your MCP client. To check it manually:
 ```bash
-uv run mcp-ical
+ICLOUD_USERNAME=... ICLOUD_PASSWORD=... uv run mcp-ical
+```
+It waits on stdin with no output on stdout.
+
+## Claude Code Configuration
+
+`claude mcp add -e` stores values in clear text in `~/.claude.json`. To keep secrets out of it, use a wrapper that sources an env file:
+
+```bash
+mkdir -p ~/.config/mcp-ical && chmod 700 ~/.config/mcp-ical
+cat > ~/.config/mcp-ical/env <<'ENV'
+ICLOUD_USERNAME=your-apple-id@example.com
+ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx
+MCP_ICAL_LOG_LEVEL=INFO
+MCP_ICAL_READ_ONLY=true
+ENV
+chmod 600 ~/.config/mcp-ical/env
+
+cat > ~/.local/bin/mcp-ical-run <<'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+set -a; source "$HOME/.config/mcp-ical/env"; set +a
+exec /ABSOLUTE/PATH/TO/uv --directory "$HOME/src/mcp-ical" run mcp-ical
+WRAPPER
+chmod +x ~/.local/bin/mcp-ical-run
+
+claude mcp add --scope user icloud-calendar -- ~/.local/bin/mcp-ical-run
 ```
 
-![iShot_2025-11-05_22.44.23](./README.assets/iShot_2025-11-05_22.44.23.png)
-
-Do **Not** close the terminal of running the server when you use iCalendar in your MCP client.
+Use the absolute path of `uv` (`which uv`) to avoid `spawn uv ENOENT`. In a Claude Code session, `/mcp` shows the server status and its tools.
 
 ## Claude Desktop Configuration
 
@@ -205,7 +232,7 @@ AI: I'll create the event with a 30-minute reminder
 
 ### Core Components
 
-- **`server.py`**: MCP server entry point with tool definitions using FastMCP
+- **`server.py`**: MCP server entry point with tool definitions using MCPServer (mcp 2.x)
 - **`caldav_client.py`**: CalDAVManager class for iCloud CalDAV access and CRUD operations
 - **`ical.py`**: CalendarManager wrapper providing compatibility layer
 - **`models.py`**: Pydantic models for request/response validation
@@ -214,9 +241,8 @@ AI: I'll create the event with a 30-minute reminder
 ### Dependencies
 
 - **mcp[cli]**: Model Context Protocol framework
-- **caldav**: CalDAV client library for iCloud access
+- **caldav** (3.x): CalDAV client library for iCloud access
 - **vobject**: iCalendar file format parsing
-- **requests**: HTTP client for CalDAV operations
 - **loguru**: Structured logging
 - **pydantic**: Data validation and serialization
 
@@ -254,17 +280,25 @@ This MCP server works with any MCP-compatible client, including:
 
 ```
 mcp-ical/
-├── src/
-│   └── mcp_ical/
-│       ├── server.py          # MCP server entry point
-│       ├── caldav_client.py   # CalDAV operations
-│       ├── ical.py           # Calendar manager wrapper
-│       ├── models.py         # Data models
-│       └── config.py         # Configuration
-├── tests/                    # Test suite
+├── mcp_ical/
+│   ├── server.py          # MCP server entry point
+│   ├── caldav_client.py   # CalDAV operations
+│   ├── ical.py            # Calendar manager wrapper
+│   ├── models.py          # Data models
+│   └── config.py          # Configuration
+├── tests/                 # Unit tests (no network)
+│   └── integration/       # Need real credentials, marked `integration`
 ├── config.json.example       # Configuration template
 ├── pyproject.toml           # Project metadata
 └── README.md                # This file
+```
+
+### Running the Tests
+
+```bash
+uv run pytest -m "not integration"   # unit tests, DAVClient mocked
+uv run ruff check .
+ICLOUD_USERNAME=... ICLOUD_PASSWORD=... uv run pytest -m integration   # read-only, against iCloud
 ```
 
 ## 📖 Known Issues and Solutions

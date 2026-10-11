@@ -2,12 +2,12 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
-from typing import Annotated, Self, Optional
+from typing import Annotated, Self
 
+import vobject
 from caldav import CalendarObjectResource
 from loguru import logger
 from pydantic import BaseModel, BeforeValidator, Field, model_validator
-import vobject
 
 
 class Frequency(IntEnum):
@@ -140,7 +140,7 @@ class Event:
     attendees: list[str] | None = None
     last_modified: FlexibleDateTime | None = None
     recurrence_rule: RecurrenceRule | None = None
-    _raw_event: Optional[CalendarObjectResource] = None  # Store the original CalDAV event
+    _raw_event: CalendarObjectResource | None = None  # Store the original CalDAV event
 
     @classmethod
     def from_caldav_event(cls, caldav_event: CalendarObjectResource) -> "Event":
@@ -161,7 +161,7 @@ class Event:
         if not hasattr(vcal, 'vevent'):
             logger.error(f"Event data has no vevent component. Data type: {type(event_data)}")
             logger.debug(f"Event data content: {str(event_data)[:500]}...")
-            raise ValueError(f"Event data has no vevent component")
+            raise ValueError("Event data has no vevent component")
 
         vevent = vcal.vevent
         logger.debug(f"Successfully extracted vevent for event {event_id}")
@@ -232,7 +232,7 @@ class Event:
                 title=title,
                 start_time=start_time,
                 end_time=end_time,
-                calendar_name=caldav_event.parent.name if hasattr(caldav_event, 'parent') and caldav_event.parent else None,
+                calendar_name=caldav_event.parent.get_display_name() if hasattr(caldav_event, 'parent') and caldav_event.parent else None,
                 location=location,
                 notes=notes,
                 url=url,
