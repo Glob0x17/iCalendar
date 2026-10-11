@@ -1,5 +1,6 @@
 import asyncio
 import io
+import logging
 
 import pytest
 from loguru import logger
@@ -82,3 +83,9 @@ def test_log_level_from_env(monkeypatch):
 def test_invalid_log_level_falls_back_to_info(monkeypatch):
     out = capture_logs("chatty", monkeypatch)
     assert "info-line" in out and "debug-line" not in out
+
+
+@pytest.mark.parametrize("level_env,expected", [(None, logging.ERROR), ("INFO", logging.ERROR), ("DEBUG", logging.DEBUG)])
+def test_caldav_warnings_only_when_debugging(monkeypatch, level_env, expected):
+    capture_logs(level_env, monkeypatch)
+    assert logging.getLogger("caldav").level == expected
