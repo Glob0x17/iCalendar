@@ -3,7 +3,7 @@ import json
 import pytest
 from loguru import logger
 
-from mcp_ical.config import DEFAULT_SERVER_URL, ConfigManager
+from mcp_icloud_caldav.config import DEFAULT_SERVER_URL, ConfigManager
 
 SECRET = "abcd-efgh-ijkl-mnop"
 

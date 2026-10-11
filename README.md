@@ -1,8 +1,8 @@
 # iCloud Calendar MCP Server
 
-<!-- mcp-name: io.github.Glob0x17/icloud-caldav-mcp -->
+<!-- mcp-name: io.github.Glob0x17/mcp-icloud-caldav -->
 
-[![PyPI](https://img.shields.io/pypi/v/icloud-caldav-mcp.svg)](https://pypi.org/project/icloud-caldav-mcp/)
+[![PyPI](https://img.shields.io/pypi/v/mcp-icloud-caldav.svg)](https://pypi.org/project/mcp-icloud-caldav/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -37,7 +37,7 @@ not registered at all.
 
 1. Sign in to [appleid.apple.com](https://appleid.apple.com/), open **Sign-In and Security**, then
    **App-Specific Passwords**.
-2. Generate a password, for example named `mcp-ical`.
+2. Generate a password, for example named `mcp-icloud-caldav`.
 
 The username is your Apple ID address, which is not necessarily an `@icloud.com` address.
 An app-specific password gives access to iCloud CalDAV, CardDAV and IMAP: keep it out of version control and revoke
@@ -45,23 +45,23 @@ it if it leaks.
 
 ## Installation
 
-The package is published on PyPI as `icloud-caldav-mcp`. With [uv](https://docs.astral.sh/uv/), MCP clients can
+The package is published on PyPI as `mcp-icloud-caldav`. With [uv](https://docs.astral.sh/uv/), MCP clients can
 start it directly, without a separate install step:
 
 ```bash
-uvx icloud-caldav-mcp
+uvx mcp-icloud-caldav
 ```
 
 `uvx` downloads the package into a cached, isolated environment on first use. To install it permanently instead:
-`uv tool install icloud-caldav-mcp` (or `pipx install icloud-caldav-mcp`).
+`uv tool install mcp-icloud-caldav` (or `pipx install mcp-icloud-caldav`).
 
 From source:
 
 ```bash
-git clone https://github.com/Glob0x17/iCalendar.git icloud-caldav-mcp
-cd icloud-caldav-mcp
+git clone https://github.com/Glob0x17/mcp-icloud-caldav.git mcp-icloud-caldav
+cd mcp-icloud-caldav
 uv sync --no-dev
-uv run icloud-caldav-mcp
+uv run mcp-icloud-caldav
 ```
 
 ## Configuration
@@ -89,7 +89,7 @@ Other settings:
 The server speaks MCP over stdio and is started by the client. To check it by hand:
 
 ```bash
-ICLOUD_USERNAME=you@example.com ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx uvx icloud-caldav-mcp
+ICLOUD_USERNAME=you@example.com ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx uvx mcp-icloud-caldav
 ```
 
 It waits on stdin and prints nothing on stdout.
@@ -105,24 +105,24 @@ Most clients store `env` values in clear text in their config file. A small wrap
 that:
 
 ```bash
-mkdir -p ~/.config/mcp-ical && chmod 700 ~/.config/mcp-ical
-cat > ~/.config/mcp-ical/env <<'EOF'
+mkdir -p ~/.config/mcp-icloud-caldav && chmod 700 ~/.config/mcp-icloud-caldav
+cat > ~/.config/mcp-icloud-caldav/env <<'EOF'
 ICLOUD_USERNAME=you@example.com
 ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx
 MCP_ICAL_READ_ONLY=true
 EOF
-chmod 600 ~/.config/mcp-ical/env
+chmod 600 ~/.config/mcp-icloud-caldav/env
 
-cat > ~/.local/bin/mcp-ical-run <<'EOF'
+cat > ~/.local/bin/mcp-icloud-caldav-run <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-set -a; source "$HOME/.config/mcp-ical/env"; set +a
-exec /absolute/path/to/uvx icloud-caldav-mcp
+set -a; source "$HOME/.config/mcp-icloud-caldav/env"; set +a
+exec /absolute/path/to/uvx mcp-icloud-caldav
 EOF
-chmod +x ~/.local/bin/mcp-ical-run
+chmod +x ~/.local/bin/mcp-icloud-caldav-run
 ```
 
-Then point the client at `~/.local/bin/mcp-ical-run`. Starting read-only and switching to `false` once reading works
+Then point the client at `~/.local/bin/mcp-icloud-caldav-run`. Starting read-only and switching to `false` once reading works
 is a sensible first step.
 
 ### Claude Desktop
@@ -134,7 +134,7 @@ In `claude_desktop_config.json`:
   "mcpServers": {
     "icloud-calendar": {
       "command": "uvx",
-      "args": ["icloud-caldav-mcp"],
+      "args": ["mcp-icloud-caldav"],
       "env": {
         "ICLOUD_USERNAME": "you@example.com",
         "ICLOUD_PASSWORD": "xxxx-xxxx-xxxx-xxxx"
@@ -144,25 +144,25 @@ In `claude_desktop_config.json`:
 }
 ```
 
-or, with the wrapper, `"command": "/home/you/.local/bin/mcp-ical-run"` and no `env`.
+or, with the wrapper, `"command": "/home/you/.local/bin/mcp-icloud-caldav-run"` and no `env`.
 
 ### Claude Code
 
 ```bash
 claude mcp add --scope user icloud-calendar \
   -e ICLOUD_USERNAME=you@example.com -e ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx \
-  -- uvx icloud-caldav-mcp
+  -- uvx mcp-icloud-caldav
 ```
 
-or, with the wrapper, `claude mcp add --scope user icloud-calendar -- ~/.local/bin/mcp-ical-run`.
+or, with the wrapper, `claude mcp add --scope user icloud-calendar -- ~/.local/bin/mcp-icloud-caldav-run`.
 
 `/mcp` in a session shows the server state and its tools.
 
 ### Other clients
 
-Any MCP client that can start a stdio server works: run `uvx icloud-caldav-mcp` with the environment variables above.
+Any MCP client that can start a stdio server works: run `uvx mcp-icloud-caldav` with the environment variables above.
 The server is also listed in the [MCP Registry](https://registry.modelcontextprotocol.io/) as
-`io.github.Glob0x17/icloud-caldav-mcp`.
+`io.github.Glob0x17/mcp-icloud-caldav`.
 
 ## Behavior worth knowing
 
@@ -218,7 +218,7 @@ ICLOUD_USERNAME=... ICLOUD_PASSWORD=... uv run pytest -m integration
 Project layout:
 
 ```
-mcp_ical/
+mcp_icloud_caldav/
 ├── server.py          # MCP server, tool registration, logging setup
 ├── caldav_client.py   # CalDAV access: search, create, update, move, delete, event index
 ├── ical.py            # Thin calendar manager used by the server
@@ -246,8 +246,9 @@ Compared with zwrong/iCalendar 0.1.0:
   - New events got a UID containing spaces and the machine's hostname.
 - **Behavior.** Events sorted by start time, compact output without empty fields, in-memory event index.
 - **Tests.** Unit tests for configuration, read-only mode, logging, iCalendar output, moves and lookups.
-- **Packaging.** Published on PyPI as `icloud-caldav-mcp` (command `icloud-caldav-mcp`; `mcp-ical` is kept as an
-  alias) and listed in the MCP Registry. The unused `mcp[cli]` extra was dropped.
+- **Packaging.** Published on PyPI as `mcp-icloud-caldav` and listed in the MCP Registry. The Python package and the
+  command are renamed from `mcp_ical` / `mcp-ical`, which clashed with the original macOS project. The unused
+  `mcp[cli]` extra was dropped.
 
 ## Credits and license
 

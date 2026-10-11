@@ -1,5 +1,5 @@
 [project]
-name = "icloud-caldav-mcp"
+name = "mcp-icloud-caldav"
 version = "0.2.0"
 description = "MCP server for iCloud Calendar over CalDAV: list, create, update, move and delete events"
 readme = "README.md"
@@ -21,14 +21,12 @@ classifiers = [
 dependencies = ["loguru>=0.7.3", "mcp>=2.3", "caldav>=3.4", "vobject>=0.9.6", "python-dateutil>=2.9"]
 
 [project.urls]
-Homepage = "https://github.com/Glob0x17/iCalendar"
-Repository = "https://github.com/Glob0x17/iCalendar"
-Issues = "https://github.com/Glob0x17/iCalendar/issues"
+Homepage = "https://github.com/Glob0x17/mcp-icloud-caldav"
+Repository = "https://github.com/Glob0x17/mcp-icloud-caldav"
+Issues = "https://github.com/Glob0x17/mcp-icloud-caldav/issues"
 
 [project.scripts]
-icloud-caldav-mcp = "mcp_ical.server:main"
-# Name used by earlier versions, kept for existing client configurations
-mcp-ical = "mcp_ical.server:main"
+mcp-icloud-caldav = "mcp_icloud_caldav.server:main"
 
 [dependency-groups]
 dev = ["pytest>=8.3.4", "pytest-mock>=3.14.0", "pytest-random-order>=1.1.1", "ruff>=0.6"]
@@ -44,10 +42,10 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["mcp_ical"]
+packages = ["mcp_icloud_caldav"]
 
 [tool.hatch.build.targets.sdist]
-include = ["mcp_ical", "tests", "README.md", "LICENSE", "config.json.example"]
+include = ["mcp_icloud_caldav", "tests", "README.md", "LICENSE", "config.json.example"]
 
 
 [tool.pytest.ini_options]

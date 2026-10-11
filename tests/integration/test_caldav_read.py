@@ -16,7 +16,7 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def manager():
-    from mcp_ical.ical import CalendarManager
+    from mcp_icloud_caldav.ical import CalendarManager
 
     return CalendarManager()
 

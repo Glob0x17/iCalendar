@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from mcp_ical.caldav_client import CalDAVManager
-from mcp_ical.models import UpdateEventRequest
+from mcp_icloud_caldav.caldav_client import CalDAVManager
+from mcp_icloud_caldav.models import UpdateEventRequest
 
 RAW = """BEGIN:VCALENDAR
 VERSION:2.0
@@ -28,9 +28,9 @@ def calendar(mocker, name, url):
 
 @pytest.fixture
 def setup(mocker):
-    mocker.patch("mcp_ical.caldav_client.get_config")
-    mocker.patch("mcp_ical.caldav_client.DAVClient")
-    mocker.patch("mcp_ical.caldav_client.Event.from_caldav_event", side_effect=lambda e: e)
+    mocker.patch("mcp_icloud_caldav.caldav_client.get_config")
+    mocker.patch("mcp_icloud_caldav.caldav_client.DAVClient")
+    mocker.patch("mcp_icloud_caldav.caldav_client.Event.from_caldav_event", side_effect=lambda e: e)
     m = CalDAVManager()
     work = calendar(mocker, "Work", "https://dav/work/")
     home = calendar(mocker, "Personal", "https://dav/home/")
@@ -87,8 +87,8 @@ def test_move_updates_index(setup):
 
 @pytest.fixture
 def real_locate(mocker):
-    mocker.patch("mcp_ical.caldav_client.get_config")
-    mocker.patch("mcp_ical.caldav_client.DAVClient")
+    mocker.patch("mcp_icloud_caldav.caldav_client.get_config")
+    mocker.patch("mcp_icloud_caldav.caldav_client.DAVClient")
     m = CalDAVManager()
     work = calendar(mocker, "Work", "https://dav/work/")
     home = calendar(mocker, "Personal", "https://dav/home/")
