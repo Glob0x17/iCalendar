@@ -87,8 +87,7 @@ END:VCALENDAR
 def test_update_adds_missing_fields_and_moves_time(manager, mocker):
     existing = mocker.Mock()
     existing.data = EXISTING
-    mocker.patch.object(manager, "find_event_by_id", return_value=existing)
-    mocker.patch.object(manager, "_find_event_calendar", return_value=manager._get_all_calendars()[0])
+    mocker.patch.object(manager, "_locate", return_value=(existing, manager._get_all_calendars()[0]))
 
     vcal = manager.update_event(
         "abc",
@@ -108,8 +107,7 @@ def test_update_adds_missing_fields_and_moves_time(manager, mocker):
 def test_update_to_all_day_keeps_existing_dates(manager, mocker):
     existing = mocker.Mock()
     existing.data = EXISTING
-    mocker.patch.object(manager, "find_event_by_id", return_value=existing)
-    mocker.patch.object(manager, "_find_event_calendar", return_value=manager._get_all_calendars()[0])
+    mocker.patch.object(manager, "_locate", return_value=(existing, manager._get_all_calendars()[0]))
 
     out = serialized(manager.update_event("abc", UpdateEventRequest(all_day=True)))
     assert "DTSTART;VALUE=DATE:20261014" in out

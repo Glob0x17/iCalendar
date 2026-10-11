@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime, timedelta
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import vobject
 from caldav import Calendar, CalendarObjectResource, DAVClient
@@ -57,6 +57,10 @@ class CalDAVManager:
         self.config = get_config()
         self.client = None
         self.principal = None
+        # In-memory index filled by every listing: event id (UID) -> (calendar URL, event URL).
+        # The server process lives as long as the MCP session, so this avoids rescanning calendars.
+        self._index: dict[str, tuple[str, str]] = {}
+        self._calendars: list[Calendar] | None = None
         self._connect()
 
     def _connect(self):
@@ -116,6 +120,7 @@ class CalDAVManager:
                         logger.debug(f"Raw event ID: {event.id}, URL: {event.url}")
 
                         parsed_event = Event.from_caldav_event(event)
+                        self._remember(event, cal)
                         logger.debug(f"Successfully parsed event: {parsed_event.title}")
                         events.append(parsed_event)
 
@@ -194,14 +199,10 @@ class CalDAVManager:
 
     def update_event(self, event_id: str, request: UpdateEventRequest) -> Event:
         """Update an existing event."""
-        existing_event = self.find_event_by_id(event_id)
-        if not existing_event:
+        located = self._locate(event_id)
+        if not located:
             raise ValueError(f"Event with ID '{event_id}' not found")
-
-        # Get the calendar containing this event
-        calendar = self._find_event_calendar(event_id)
-        if not calendar:
-            raise ValueError("Could not find calendar for event")
+        existing_event, calendar = located
 
         # Load the event data
         event_data = existing_event.data
@@ -270,19 +271,24 @@ class CalDAVManager:
                 rrule_str = self._recurrence_rule_to_ical(request.recurrence_rule)
                 vevent.add('rrule').value = rrule_str
 
+        content_changed = any(
+            v is not None
+            for k, v in request.model_dump().items()
+            if k != "calendar_name"
+        )
+
         # Handle calendar change
         if request.calendar_name and request.calendar_name != calendar.get_display_name():
             new_calendar = self._find_calendar_by_name(request.calendar_name)
             if not new_calendar:
                 raise ValueError(f"Calendar '{request.calendar_name}' not found")
-
-            # Delete from old calendar and save to new one
-            existing_event.delete()
-            calendar = new_calendar
+            # A pure move keeps the original iCalendar text untouched
+            return self._move(existing_event, calendar, new_calendar, vcal if content_changed else None)
 
         try:
             # Save updated event
             event = calendar.add_event(vcal)
+            self._remember(event, calendar)
             logger.info(f"Successfully updated event: {event.id}")
             return Event.from_caldav_event(event)
 
@@ -290,14 +296,48 @@ class CalDAVManager:
             logger.error(f"Failed to update event: {e}")
             raise
 
+    def _move(self, existing_event, old_calendar: Calendar, new_calendar: Calendar, changed_vcal) -> Event:
+        """Move an event with a WebDAV MOVE: atomic on the server, same UID, same file name.
+
+        iCloud refuses the same UID in two calendars (412), so copy-then-delete is not possible. With MOVE
+        there is no window where the event exists nowhere, and a failed MOVE leaves the original in place.
+        """
+        source = str(existing_event.url)
+        target = str(new_calendar.url) + source.rstrip("/").rsplit("/", 1)[-1]
+        try:
+            response = self.client.request(source, "MOVE", "", {"Destination": target, "Overwrite": "F"})
+            status = response.status
+        except Exception as e:
+            status, reason = None, str(e)
+        else:
+            reason = getattr(response, "reason", "")
+        if status not in (201, 204):
+            logger.error(f"MOVE failed ({status} {reason}), original left untouched")
+            raise ValueError(
+                f"Could not move the event to '{new_calendar.get_display_name()}' ({status} {reason}), "
+                f"the original is left untouched in '{old_calendar.get_display_name()}'"
+            )
+        self._forget(existing_event)
+
+        moved = new_calendar.event_by_url(target)
+        if changed_vcal is not None:
+            moved.data = changed_vcal.serialize()
+            moved.save()
+        moved.load()
+        self._remember(moved, new_calendar)
+        logger.info(f"Moved event {moved.id} to another calendar")
+        return Event.from_caldav_event(moved)
+
     def delete_event(self, event_id: str) -> bool:
         """Delete an event by its identifier."""
-        existing_event = self.find_event_by_id(event_id)
-        if not existing_event:
+        located = self._locate(event_id)
+        if not located:
             raise ValueError(f"Event with ID '{event_id}' not found")
+        existing_event, _ = located
 
         try:
             existing_event.delete()
+            self._forget(existing_event)
             logger.info(f"Successfully deleted event with ID: {event_id}")
             return True
 
@@ -306,121 +346,98 @@ class CalDAVManager:
             raise
 
     def find_event_by_id(self, event_id: str) -> CalendarObjectResource | None:
-        """Find an event by its identifier."""
-        logger.debug(f"Searching for event with ID: {event_id}")
+        """Find an event by its identifier (UID or URL)."""
+        located = self._locate(event_id)
+        return located[0] if located else None
 
-        # URL-decode the event_id to handle cases where it contains encoded characters
-        decoded_event_id = unquote(event_id)
-        logger.debug(f"Decoded event ID: {decoded_event_id}")
+    def _locate(self, event_id: str) -> tuple[CalendarObjectResource, Calendar] | None:
+        """Find an event and its calendar.
 
+        1. In-memory index (one GET on the known URL)
+        2. iCloud stores most events at <calendar>/<UID>.ics (one GET per calendar)
+        3. Full scan of every calendar, which refills the index
+        """
+        decoded = unquote(event_id)
         calendars = self._get_all_calendars()
+        by_url = {str(c.url): c for c in calendars}
 
-        for calendar in calendars:
+        cached = self._index.get(decoded)
+        if cached and cached[0] in by_url:
+            found = self._load(by_url[cached[0]], cached[1])
+            if found:
+                logger.debug(f"Found event {decoded} via the in-memory index")
+                return found, by_url[cached[0]]
+            self._index.pop(decoded, None)
+
+        if "/" not in decoded:
+            for calendar in calendars:
+                found = self._load(calendar, str(calendar.url) + quote(decoded) + ".ics")
+                if found and found.id in (event_id, decoded):
+                    logger.debug(f"Found event {decoded} at its UID URL")
+                    self._remember(found, calendar)
+                    return found, calendar
+
+        logger.debug(f"Scanning all calendars for event {decoded}")
+        result = None
+        for calendar in self._get_all_calendars(refresh=True):
             try:
-                logger.debug(f"Searching calendar '{calendar.get_display_name()}' for event ID '{event_id}'")
                 events = calendar.events()
-                logger.debug(f"Calendar '{calendar.get_display_name()}' has {len(events)} total events")
-
-                for event in events:
-                    # Try multiple approaches to match the event
-                    # 1. Try event.id (if available and not None)
-                    if event.id is not None:
-                        if event.id == event_id or event.id == decoded_event_id:
-                            logger.debug("Found event via event.id match")
-                            return event
-                        # Also try comparing unquote of stored event ID
-                        try:
-                            if unquote(event.id) == decoded_event_id:
-                                logger.debug("Found event via unquote(event.id) match")
-                                return event
-                        except Exception:
-                            # If unquote fails, skip this comparison
-                            pass
-
-                    # 2. Try event.url (CalDAV often uses URL as the identifier)
-                    if hasattr(event, 'url') and event.url:
-                        event_url = str(event.url)
-                        # Compare both encoded and decoded versions
-                        if event_url == event_id or event_url == decoded_event_id:
-                            logger.debug("Found event via event.url match")
-                            return event
-                        # Try unquoting the URL
-                        try:
-                            if unquote(event_url) == decoded_event_id:
-                                logger.debug("Found event via unquote(event.url) match")
-                                return event
-                        except Exception:
-                            pass
-
             except Exception as e:
                 logger.error(f"Failed to search calendar {calendar.get_display_name()} for event {event_id}: {e}")
-                logger.debug(f"Calendar details that failed: name='{calendar.get_display_name()}', url='{calendar.url}'")
                 continue
+            for event in events:
+                self._remember(event, calendar)
+                ids = {event.id, unquote(event.id)} if event.id else set()
+                urls = {str(event.url), unquote(str(event.url))} if event.url else set()
+                if result is None and (event_id in ids | urls or decoded in ids | urls):
+                    result = (event, calendar)
+        if result is None:
+            logger.debug(f"Event with ID '{event_id}' not found in any calendar")
+        return result
 
-        logger.debug(f"Event with ID '{event_id}' not found in any calendar")
-        return None
+    @staticmethod
+    def _load(calendar: Calendar, url: str) -> CalendarObjectResource | None:
+        try:
+            event = calendar.event_by_url(url)
+            event.load()
+            return event
+        except Exception:
+            return None
+
+    def _remember(self, event, calendar: Calendar) -> None:
+        if getattr(event, "id", None) and getattr(event, "url", None):
+            self._index[event.id] = (str(calendar.url), str(event.url))
+
+    def _forget(self, event) -> None:
+        if getattr(event, "id", None):
+            self._index.pop(event.id, None)
 
     def list_calendar_names(self) -> list[str]:
         """List all available calendar names."""
-        calendars = self._get_all_calendars()
+        calendars = self._get_all_calendars(refresh=True)
         return [cal.get_display_name() for cal in calendars]
 
-    def _get_all_calendars(self) -> list[Calendar]:
-        """Get all calendars from the CalDAV server."""
+    def _get_all_calendars(self, refresh: bool = False) -> list[Calendar]:
+        """Get all calendars from the CalDAV server (cached; refresh=True forces a new PROPFIND)."""
+        if self._calendars is not None and not refresh:
+            return self._calendars
         try:
             calendars = self.principal.calendars()
             logger.debug(f"Successfully retrieved {len(calendars)} calendars")
             for cal in calendars:
                 logger.debug(f"Calendar: name='{cal.get_display_name()}', url='{cal.url}'")
+            self._calendars = calendars
             return calendars
         except Exception as e:
             logger.error(f"Failed to get calendars: {e}")
-            return []
+            return self._calendars or []
 
     def _find_calendar_by_name(self, calendar_name: str) -> Calendar | None:
-        """Find a calendar by name."""
-        calendars = self._get_all_calendars()
-        for calendar in calendars:
-            if calendar.get_display_name() == calendar_name:
-                return calendar
-        return None
-
-    def _find_event_calendar(self, event_id: str) -> Calendar | None:
-        """Find which calendar contains the specified event."""
-        # URL-decode the event_id to handle cases where it contains encoded characters
-        decoded_event_id = unquote(event_id)
-
-        for calendar in self._get_all_calendars():
-            try:
-                events = calendar.events()
-                for event in events:
-                    # Try multiple approaches to match the event
-                    # 1. Try event.id (if available and not None)
-                    if event.id is not None:
-                        if event.id == event_id or event.id == decoded_event_id:
-                            return calendar
-                        # Also try comparing unquote of stored event ID
-                        try:
-                            if unquote(event.id) == decoded_event_id:
-                                return calendar
-                        except Exception:
-                            # If unquote fails, skip this comparison
-                            pass
-
-                    # 2. Try event.url (CalDAV often uses URL as the identifier)
-                    if hasattr(event, 'url') and event.url:
-                        event_url = str(event.url)
-                        # Compare both encoded and decoded versions
-                        if event_url == event_id or event_url == decoded_event_id:
-                            return calendar
-                        # Try unquoting the URL
-                        try:
-                            if unquote(event_url) == decoded_event_id:
-                                return calendar
-                        except Exception:
-                            pass
-            except Exception as e:
-                logger.warning(f"Failed to search calendar {calendar.get_display_name()}: {e}")
+        """Find a calendar by name, refreshing the cached list once if it is unknown."""
+        for refresh in (False, True):
+            for calendar in self._get_all_calendars(refresh=refresh):
+                if calendar.get_display_name() == calendar_name:
+                    return calendar
         return None
 
     def _recurrence_rule_to_ical(self, recurrence_rule) -> str:
