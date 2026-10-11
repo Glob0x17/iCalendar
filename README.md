@@ -97,7 +97,17 @@ It waits on stdin and prints nothing on stdout.
 ## Client setup
 
 Use the absolute path of `uvx` (`which uvx`) if the client cannot find it: clients often start servers without your
-shell `PATH`, which shows up as `spawn uvx ENOENT`.
+shell `PATH`, which shows up as `spawn uvx ENOENT`. Usual locations:
+
+| Installed with | Path |
+|---|---|
+| The uv installer (Linux, macOS) | `~/.local/bin/uvx` |
+| Homebrew on Apple silicon | `/opt/homebrew/bin/uvx` |
+| Homebrew on Intel Macs | `/usr/local/bin/uvx` |
+
+The command and its argument are separate fields: the command is `uvx` (or its path) and `mcp-icloud-caldav` is an
+argument. A config where the command is the single string `"uvx mcp-icloud-caldav"` fails with `ENOENT`, because
+the client looks for a program with that exact name, space included.
 
 ### Keeping the password out of the client config
 
@@ -127,7 +137,8 @@ is a sensible first step.
 
 ### Claude Desktop
 
-In `claude_desktop_config.json`:
+In `claude_desktop_config.json` (Settings, Developer, Edit Config). On macOS it is
+`~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -144,7 +155,9 @@ In `claude_desktop_config.json`:
 }
 ```
 
-or, with the wrapper, `"command": "/home/you/.local/bin/mcp-icloud-caldav-run"` and no `env`.
+or, with the wrapper, `"command": "/home/you/.local/bin/mcp-icloud-caldav-run"` and no `env`. Quit Claude Desktop
+completely and start it again after editing. On macOS, server logs are in
+`~/Library/Logs/Claude/mcp-server-icloud-calendar.log`.
 
 ### Claude Code
 
@@ -156,7 +169,12 @@ claude mcp add --scope user icloud-calendar \
 
 or, with the wrapper, `claude mcp add --scope user icloud-calendar -- ~/.local/bin/mcp-icloud-caldav-run`.
 
-`/mcp` in a session shows the server state and its tools.
+Do not quote what follows `--`: `-- uvx mcp-icloud-caldav` registers `uvx` as the command and `mcp-icloud-caldav` as
+its argument, while `-- "uvx mcp-icloud-caldav"` registers one program name and fails with `ENOENT`. To fix an
+existing entry, remove it with `claude mcp remove icloud-calendar --scope user` and add it again.
+
+`/mcp` in a session shows the server state and its tools; `claude mcp get icloud-calendar` shows the registered
+command and arguments.
 
 ### Other clients
 
@@ -194,7 +212,7 @@ The server is also listed in the [MCP Registry](https://registry.modelcontextpro
 | Symptom | Likely cause |
 |---|---|
 | `401 Unauthorized` | Regular Apple ID password instead of an app-specific one, or a revoked one |
-| `spawn uv ENOENT` | `uv` is not on the client's `PATH`: use its absolute path |
+| `spawn uvx ENOENT` or `ENOENT` | `uvx` is not on the client's `PATH` (use its absolute path), or the command and its argument were registered as one string (see [Client setup](#client-setup)) |
 | No events returned | Wrong date range, an event in a non-iCloud or subscribed calendar, or a timezone mix-up |
 | Server does not respond | Something writes to stdout and breaks the stdio protocol |
 | `Calendar 'X' not found` | Calendar names are case-sensitive: check `list_calendars` |
