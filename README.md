@@ -7,8 +7,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that gives M
 over CalDAV: list calendars, read, create, update, move and delete events. It works on Linux, macOS and Windows,
 since it talks to iCloud directly instead of going through the macOS Calendar app.
 
-This is a maintained fork of [zwrong/iCalendar](https://github.com/zwrong/iCalendar), itself derived from the macOS
-`mcp-ical` server. See [Changes in this fork](#changes-in-this-fork).
+It started as an iCloud port of the macOS `mcp-ical` server. See the [changelog](#changelog) for what changed in 0.2.0.
 
 ## Tools
 
@@ -43,7 +42,7 @@ it if it leaks.
 ## Installation
 
 ```bash
-git clone https://github.com/Glob0x17/iCalendar.git mcp-ical
+git clone https://github.com/zwrong/iCalendar.git mcp-ical
 cd mcp-ical
 uv sync --no-dev
 ```
@@ -207,9 +206,9 @@ tests/                 # Unit tests
 tests/integration/     # Read-only tests against a real account
 ```
 
-## Changes in this fork
+## Changelog
 
-Compared with zwrong/iCalendar 0.1.0:
+### 0.2.0
 
 - **Dependencies.** Lockfile regenerated from the official PyPI index (it resolved packages through a third-party
   mirror over plain HTTP). Upgrade to `mcp` 2.x (`FastMCP` became `MCPServer`) and `caldav` 3.x; the original code no
@@ -231,6 +230,5 @@ Compared with zwrong/iCalendar 0.1.0:
 MIT, see [LICENSE](LICENSE).
 
 - The original macOS `mcp-ical` server (Omar D.), whose copyright notice is kept in `LICENSE`
-- [zwrong/iCalendar](https://github.com/zwrong/iCalendar), the iCloud CalDAV port this fork builds on
 - [python-caldav](https://github.com/python-caldav/caldav) and the
   [Model Context Protocol](https://modelcontextprotocol.io/) Python SDK
