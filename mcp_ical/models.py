@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, time
 from enum import IntEnum
 from typing import Annotated, Self
 
@@ -266,21 +266,41 @@ class Event:
                 f"Occurrences: {self.recurrence_rule.occurrence_count or 'N/A'}"
             )
 
-        return (
-            f"Event: {self.title},\n"
-            f" - Identifier: {self.identifier},\n"
-            f" - Start Time: {self.start_time},\n"
-            f" - End Time: {self.end_time},\n"
-            f" - Calendar: {self.calendar_name or 'N/A'},\n"
-            f" - Location: {self.location or 'N/A'},\n"
-            f" - Notes: {self.notes or 'N/A'},\n"
-            f" - Alarms (minutes before): {alarms_list},\n"
-            f" - URL: {self.url or 'N/A'},\n"
-            f" - All Day Event?: {self.all_day},\n"
-            f" - Organizer: {self.organizer or 'N/A'},\n"
-            f" - Attendees: {attendees_list},\n"
-            f" - {recurrence_info}\n"
-        )
+        # Empty fields are left out to keep the output short; the identifier is always kept
+        # because update_event and delete_event need it.
+        lines = [
+            f"Event: {self.title}",
+            f" - Identifier: {self.identifier}",
+            f" - Start Time: {self.start_time}",
+            f" - End Time: {self.end_time}",
+        ]
+        optional = [
+            ("Calendar", self.calendar_name),
+            ("Location", self.location),
+            ("Notes", self.notes),
+            ("Alarms (minutes before)", alarms_list if self.alarms_minutes_offsets else None),
+            ("URL", self.url),
+            ("All Day Event", "yes" if self.all_day else None),
+            ("Organizer", self.organizer),
+            ("Attendees", attendees_list if self.attendees else None),
+        ]
+        lines += [f" - {label}: {value}" for label, value in optional if value]
+        if self.recurrence_rule:
+            lines.append(f" - {recurrence_info}")
+        return "\n".join(lines) + "\n"
+
+    def sort_key(self) -> float:
+        """Chronological key that works across all-day dates, naive and aware datetimes."""
+        return _to_timestamp(self.start_time)
+
+
+def _to_timestamp(value) -> float:
+    if isinstance(value, datetime):
+        # Naive datetimes are taken as local time, like datetime.timestamp() does
+        return value.timestamp()
+    if isinstance(value, date):
+        return datetime.combine(value, time.min).timestamp()
+    return float("inf")
 
 
 class CreateEventRequest(BaseModel):
