@@ -1,0 +1,52 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Glob0x17/icloud-caldav-mcp",
+  "title": "iCloud Calendar (CalDAV)",
+  "description": "iCloud Calendar over CalDAV: list, create, update, move and delete events. Optional read-only mode.",
+  "repository": {
+    "url": "https://github.com/Glob0x17/iCalendar",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "icloud-caldav-mcp",
+      "version": "0.2.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ICLOUD_USERNAME",
+          "description": "Apple ID email address",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "ICLOUD_PASSWORD",
+          "description": "App-specific password from appleid.apple.com (not the Apple ID password)",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "MCP_ICAL_READ_ONLY",
+          "description": "Set to true to leave out the create, update and delete tools",
+          "isRequired": false,
+          "format": "boolean",
+          "default": "false"
+        },
+        {
+          "name": "MCP_ICAL_LOG_LEVEL",
+          "description": "Log level on stderr: TRACE, DEBUG, INFO, WARNING or ERROR",
+          "isRequired": false,
+          "format": "string",
+          "default": "INFO"
+        }
+      ]
+    }
+  ]
+}

@@ -1,10 +1,34 @@
 [project]
-name = "mcp-ical"
+name = "icloud-caldav-mcp"
 version = "0.2.0"
-description = "A Model Context Protocol server providing tools for CRUD operations on iCloud calendars via CalDAV"
+description = "MCP server for iCloud Calendar over CalDAV: list, create, update, move and delete events"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["loguru>=0.7.3", "mcp[cli]>=2.3", "caldav>=3.4", "vobject>=0.9.6", "python-dateutil>=2.9"]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Glob0x17" }]
+keywords = ["mcp", "model-context-protocol", "icloud", "caldav", "calendar"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Scheduling",
+]
+dependencies = ["loguru>=0.7.3", "mcp>=2.3", "caldav>=3.4", "vobject>=0.9.6", "python-dateutil>=2.9"]
+
+[project.urls]
+Homepage = "https://github.com/Glob0x17/iCalendar"
+Repository = "https://github.com/Glob0x17/iCalendar"
+Issues = "https://github.com/Glob0x17/iCalendar/issues"
+
+[project.scripts]
+icloud-caldav-mcp = "mcp_ical.server:main"
+# Name used by earlier versions, kept for existing client configurations
+mcp-ical = "mcp_ical.server:main"
 
 [dependency-groups]
 dev = ["pytest>=8.3.4", "pytest-mock>=3.14.0", "pytest-random-order>=1.1.1", "ruff>=0.6"]
@@ -16,8 +40,14 @@ default = true
 
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcp_ical"]
+
+[tool.hatch.build.targets.sdist]
+include = ["mcp_ical", "tests", "README.md", "LICENSE", "config.json.example"]
 
 
 [tool.pytest.ini_options]
@@ -37,6 +67,3 @@ ignore = [
     # Configuration errors are reported as ValueError, which the server layer catches.
     "TRY004",
 ]
-
-[project.scripts]
-mcp-ical = "mcp_ical.server:main"

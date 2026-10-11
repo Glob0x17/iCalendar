@@ -1,5 +1,8 @@
 # iCloud Calendar MCP Server
 
+<!-- mcp-name: io.github.Glob0x17/icloud-caldav-mcp -->
+
+[![PyPI](https://img.shields.io/pypi/v/icloud-caldav-mcp.svg)](https://pypi.org/project/icloud-caldav-mcp/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -42,10 +45,23 @@ it if it leaks.
 
 ## Installation
 
+The package is published on PyPI as `icloud-caldav-mcp`. With [uv](https://docs.astral.sh/uv/), MCP clients can
+start it directly, without a separate install step:
+
 ```bash
-git clone https://github.com/Glob0x17/iCalendar.git mcp-ical
-cd mcp-ical
+uvx icloud-caldav-mcp
+```
+
+`uvx` downloads the package into a cached, isolated environment on first use. To install it permanently instead:
+`uv tool install icloud-caldav-mcp` (or `pipx install icloud-caldav-mcp`).
+
+From source:
+
+```bash
+git clone https://github.com/Glob0x17/iCalendar.git icloud-caldav-mcp
+cd icloud-caldav-mcp
 uv sync --no-dev
+uv run icloud-caldav-mcp
 ```
 
 ## Configuration
@@ -73,15 +89,15 @@ Other settings:
 The server speaks MCP over stdio and is started by the client. To check it by hand:
 
 ```bash
-ICLOUD_USERNAME=you@example.com ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx uv run mcp-ical
+ICLOUD_USERNAME=you@example.com ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx uvx icloud-caldav-mcp
 ```
 
 It waits on stdin and prints nothing on stdout.
 
 ## Client setup
 
-Use the absolute path of `uv` (`which uv`): clients often start servers without your shell `PATH`, which shows up
-as `spawn uv ENOENT`.
+Use the absolute path of `uvx` (`which uvx`) if the client cannot find it: clients often start servers without your
+shell `PATH`, which shows up as `spawn uvx ENOENT`.
 
 ### Keeping the password out of the client config
 
@@ -101,7 +117,7 @@ cat > ~/.local/bin/mcp-ical-run <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 set -a; source "$HOME/.config/mcp-ical/env"; set +a
-exec /absolute/path/to/uv --directory /absolute/path/to/mcp-ical run --frozen --no-dev mcp-ical
+exec /absolute/path/to/uvx icloud-caldav-mcp
 EOF
 chmod +x ~/.local/bin/mcp-ical-run
 ```
@@ -117,8 +133,8 @@ In `claude_desktop_config.json`:
 {
   "mcpServers": {
     "icloud-calendar": {
-      "command": "/absolute/path/to/uv",
-      "args": ["--directory", "/absolute/path/to/mcp-ical", "run", "--frozen", "--no-dev", "mcp-ical"],
+      "command": "uvx",
+      "args": ["icloud-caldav-mcp"],
       "env": {
         "ICLOUD_USERNAME": "you@example.com",
         "ICLOUD_PASSWORD": "xxxx-xxxx-xxxx-xxxx"
@@ -133,15 +149,20 @@ or, with the wrapper, `"command": "/home/you/.local/bin/mcp-ical-run"` and no `e
 ### Claude Code
 
 ```bash
-claude mcp add --scope user icloud-calendar -- ~/.local/bin/mcp-ical-run
+claude mcp add --scope user icloud-calendar \
+  -e ICLOUD_USERNAME=you@example.com -e ICLOUD_PASSWORD=xxxx-xxxx-xxxx-xxxx \
+  -- uvx icloud-caldav-mcp
 ```
+
+or, with the wrapper, `claude mcp add --scope user icloud-calendar -- ~/.local/bin/mcp-ical-run`.
 
 `/mcp` in a session shows the server state and its tools.
 
 ### Other clients
 
-Any MCP client that can start a stdio server works: run `uv --directory /path/to/mcp-ical run mcp-ical` with the
-environment variables above.
+Any MCP client that can start a stdio server works: run `uvx icloud-caldav-mcp` with the environment variables above.
+The server is also listed in the [MCP Registry](https://registry.modelcontextprotocol.io/) as
+`io.github.Glob0x17/icloud-caldav-mcp`.
 
 ## Behavior worth knowing
 
@@ -225,6 +246,8 @@ Compared with zwrong/iCalendar 0.1.0:
   - New events got a UID containing spaces and the machine's hostname.
 - **Behavior.** Events sorted by start time, compact output without empty fields, in-memory event index.
 - **Tests.** Unit tests for configuration, read-only mode, logging, iCalendar output, moves and lookups.
+- **Packaging.** Published on PyPI as `icloud-caldav-mcp` (command `icloud-caldav-mcp`; `mcp-ical` is kept as an
+  alias) and listed in the MCP Registry. The unused `mcp[cli]` extra was dropped.
 
 ## Credits and license
 
