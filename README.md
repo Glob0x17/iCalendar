@@ -248,7 +248,9 @@ tests/integration/     # Read-only tests against a real account
 
 ## Changes in this fork
 
-Compared with zwrong/iCalendar 0.1.0:
+**0.2.1**: documentation only (uvx locations, `ENOENT` causes, client paths on macOS).
+
+**0.2.0**, compared with zwrong/iCalendar 0.1.0:
 
 - **Dependencies.** Lockfile regenerated from the official PyPI index (it resolved packages through a third-party
   mirror over plain HTTP). Upgrade to `mcp` 2.x (`FastMCP` became `MCPServer`) and `caldav` 3.x; the original code no
