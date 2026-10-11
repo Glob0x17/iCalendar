@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from datetime import datetime
@@ -26,6 +27,12 @@ def configure_logging(level: str | None = None) -> None:
     except ValueError:
         logger.add(sys.stderr, format=LOG_FORMAT, level="INFO")
         logger.warning(f"Unknown {ENV_LOG_LEVEL}={level!r}, falling back to INFO")
+        level = "INFO"
+
+    # caldav logs its iCalendar fix-ups as warnings that include a diff of the event (title, notes...):
+    # only let them through when debugging.
+    debugging = level in ("TRACE", "DEBUG")
+    logging.getLogger("caldav").setLevel(logging.DEBUG if debugging else logging.ERROR)
 
 
 def is_read_only(environ=None) -> bool:
