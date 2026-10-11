@@ -734,6 +734,7 @@ dependencies = [
     { name = "caldav" },
     { name = "loguru" },
     { name = "mcp", extra = ["cli"] },
+    { name = "python-dateutil" },
     { name = "vobject" },
 ]
 
@@ -750,6 +751,7 @@ requires-dist = [
     { name = "caldav", specifier = ">=3.4" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.3" },
+    { name = "python-dateutil", specifier = ">=2.9" },
     { name = "vobject", specifier = ">=0.9.6" },
 ]
 

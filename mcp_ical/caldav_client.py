@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import unquote
 
 import vobject
 from caldav import Calendar, CalendarObjectResource, DAVClient
+from dateutil import tz
 from loguru import logger
 
 from .config import get_config
@@ -11,6 +12,41 @@ from .models import (
     Event,
     UpdateEventRequest,
 )
+
+
+def to_ical_datetime(value: datetime) -> datetime:
+    """Return an aware UTC datetime that vobject can serialize.
+
+    vobject cannot name a fixed-offset timezone such as +02:00 (nor datetime.timezone.utc), and a naive
+    datetime would be written as floating time. Naive values are taken as the machine's local time.
+    """
+    return value.astimezone(tz.UTC)
+
+
+def to_ical_date(value: date) -> date:
+    return value.date() if isinstance(value, datetime) else value
+
+
+def event_dates(start: date, end: date, all_day: bool) -> tuple[date, date]:
+    """DTSTART/DTEND values: dates for all-day events (DTEND exclusive), UTC datetimes otherwise."""
+    if all_day:
+        start, end = to_ical_date(start), to_ical_date(end)
+        if end <= start:
+            end = start + timedelta(days=1)
+        return start, end
+    if not isinstance(start, datetime):
+        start = datetime.combine(start, datetime.min.time())
+    if not isinstance(end, datetime):
+        end = datetime.combine(end, datetime.min.time())
+    return to_ical_datetime(start), to_ical_datetime(end)
+
+
+def set_text(vevent, name: str, value: str) -> None:
+    """Set a text property, creating it when the event does not have it yet."""
+    if name in vevent.contents:
+        getattr(vevent, name).value = value
+    else:
+        vevent.add(name).value = value
 
 
 class CalDAVManager:
@@ -117,8 +153,9 @@ class CalDAVManager:
 
         # Set basic properties
         vevent.add('summary').value = new_event.title
-        vevent.add('dtstart').value = new_event.start_time
-        vevent.add('dtend').value = new_event.end_time
+        start, end = event_dates(new_event.start_time, new_event.end_time, new_event.all_day)
+        vevent.add('dtstart').value = start
+        vevent.add('dtend').value = end
 
         if new_event.notes:
             vevent.add('description').value = new_event.notes
@@ -128,11 +165,6 @@ class CalDAVManager:
 
         if new_event.url:
             vevent.add('url').value = new_event.url
-
-        # Handle all-day events
-        if new_event.all_day:
-            vevent.dtstart.value_param = 'DATE'
-            vevent.dtend.value_param = 'DATE'
 
         # Add alarms
         if new_event.alarms_minutes_offsets:
@@ -187,23 +219,30 @@ class CalDAVManager:
         # Update fields
         if request.title is not None:
             vevent.summary.value = request.title
-        if request.start_time is not None:
-            vevent.dtstart.value = request.start_time
-        if request.end_time is not None:
-            vevent.dtend.value = request.end_time
-        if request.location is not None:
-            vevent.location.value = request.location
-        if request.notes is not None:
-            vevent.description.value = request.notes
-        if request.url is not None:
-            vevent.url.value = request.url
-        if request.all_day is not None:
-            if request.all_day:
-                vevent.dtstart.value_param = 'DATE'
-                vevent.dtend.value_param = 'DATE'
+        if request.start_time is not None or request.end_time is not None or request.all_day is not None:
+            current_start = vevent.dtstart.value
+            current_end = vevent.dtend.value if 'dtend' in vevent.contents else current_start
+            currently_all_day = not isinstance(current_start, datetime)
+            start, end = event_dates(
+                request.start_time if request.start_time is not None else current_start,
+                request.end_time if request.end_time is not None else current_end,
+                request.all_day if request.all_day is not None else currently_all_day,
+            )
+            vevent.dtstart.value = start
+            if 'dtend' in vevent.contents:
+                vevent.dtend.value = end
             else:
-                vevent.dtstart.value_param = 'DATETIME'
-                vevent.dtend.value_param = 'DATETIME'
+                vevent.add('dtend').value = end
+            for prop in (vevent.dtstart, vevent.dtend):
+                prop.params.pop('VALUE', None)
+                prop.params.pop('TZID', None)
+                prop.params.pop('X-VOBJ-ORIGINAL-TZID', None)
+        if request.location is not None:
+            set_text(vevent, 'location', request.location)
+        if request.notes is not None:
+            set_text(vevent, 'description', request.notes)
+        if request.url is not None:
+            set_text(vevent, 'url', request.url)
 
         # Update alarms
         if request.alarms_minutes_offsets is not None:
@@ -403,7 +442,7 @@ class CalDAVManager:
             parts.append(f'BYDAY={",".join(days)}')
 
         if recurrence_rule.end_date:
-            parts.append(f'UNTIL={recurrence_rule.end_date.strftime("%Y%m%dT%H%M%SZ")}')
+            parts.append(f'UNTIL={to_ical_datetime(recurrence_rule.end_date).strftime("%Y%m%dT%H%M%SZ")}')
         elif recurrence_rule.occurrence_count:
             parts.append(f'COUNT={recurrence_rule.occurrence_count}')
 
