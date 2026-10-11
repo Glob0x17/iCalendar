@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime, timedelta
 from urllib.parse import unquote
 
@@ -152,6 +153,8 @@ class CalDAVManager:
         vevent = vcal.add('vevent')
 
         # Set basic properties
+        # vobject's default UID contains spaces and the hostname; use a UUID like Apple clients do
+        vevent.add('uid').value = str(uuid.uuid4()).upper()
         vevent.add('summary').value = new_event.title
         start, end = event_dates(new_event.start_time, new_event.end_time, new_event.all_day)
         vevent.add('dtstart').value = start

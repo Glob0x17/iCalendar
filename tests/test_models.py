@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 from mcp_ical.models import Event
 
@@ -44,3 +44,39 @@ def test_str_shows_filled_fields():
     assert "Alarms (minutes before): 15, 60" in out
     assert "All Day Event: yes" in out
     assert "Attendees: a@b.fr" in out
+
+
+ALARM_EVENT = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:abc
+DTSTAMP:20261011T100000Z
+DTSTART:20261014T180000Z
+DTEND:20261014T183000Z
+SUMMARY:t
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:t
+TRIGGER:-PT15M
+END:VALARM
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:t
+TRIGGER:-PT1H
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+def test_alarms_are_read_back(mocker):
+    caldav_event = mocker.Mock(id="abc", data=ALARM_EVENT, parent=None)
+    event = Event.from_caldav_event(caldav_event)
+    assert sorted(event.alarms_minutes_offsets) == [15, 60]
+    assert event.all_day is False
+
+
+def test_aware_times_displayed_in_local_zone():
+    out = str(make("t", datetime(2026, 10, 14, 18, 0, tzinfo=UTC)))
+    local = datetime(2026, 10, 14, 18, 0, tzinfo=UTC).astimezone()
+    assert f"Start Time: {local}" in out

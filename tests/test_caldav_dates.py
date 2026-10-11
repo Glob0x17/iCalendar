@@ -58,6 +58,8 @@ def test_create_event_serializes_offset_datetimes(manager):
     assert "DTEND:20261014T183000Z" in out
     assert "UNTIL=20261201T180000Z" in out
     assert "TRIGGER:-PT15M" in out
+    uid = vobject.readOne(out).vevent.uid.value
+    assert " " not in uid and len(uid) == 36
 
 
 def test_create_all_day_event(manager):

@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from enum import IntEnum
 from typing import Annotated, Self
 
@@ -186,16 +186,21 @@ class Event:
         # Check if all-day event
         all_day = False
         if hasattr(vevent, 'dtstart') and vevent.dtstart:
-            all_day = hasattr(vevent.dtstart, 'value_param') and vevent.dtstart.value_param == 'DATE'
+            all_day = not isinstance(vevent.dtstart.value, datetime)
 
         # Process alarms
         alarms = []
         if hasattr(vevent, 'valarm'):
             for alarm in vevent.getChildren():
                 if alarm.name == 'VALARM' and hasattr(alarm, 'trigger') and alarm.trigger:
-                    trigger = str(alarm.trigger.value)
+                    trigger = alarm.trigger.value
+                    # vobject parses relative triggers into a timedelta (-15 min for "-PT15M")
+                    if isinstance(trigger, timedelta):
+                        if trigger <= timedelta(0):
+                            alarms.append(int(-trigger.total_seconds() // 60))
+                        continue
                     # Parse trigger like "-PT15M" (15 minutes before)
-                    match = re.match(r'-PT(\d+)([HM])', trigger)
+                    match = re.match(r'-PT(\d+)([HM])', str(trigger))
                     if match:
                         amount = int(match.group(1))
                         unit = match.group(2)
@@ -271,8 +276,8 @@ class Event:
         lines = [
             f"Event: {self.title}",
             f" - Identifier: {self.identifier}",
-            f" - Start Time: {self.start_time}",
-            f" - End Time: {self.end_time}",
+            f" - Start Time: {_local(self.start_time)}",
+            f" - End Time: {_local(self.end_time)}",
         ]
         optional = [
             ("Calendar", self.calendar_name),
@@ -292,6 +297,13 @@ class Event:
     def sort_key(self) -> float:
         """Chronological key that works across all-day dates, naive and aware datetimes."""
         return _to_timestamp(self.start_time)
+
+
+def _local(value):
+    """Show aware datetimes in the machine's timezone (events are stored in UTC or in their own zone)."""
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.astimezone()
+    return value
 
 
 def _to_timestamp(value) -> float:
